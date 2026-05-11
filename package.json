@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "n8n community node for Physalis — fetch secrets/services/accounts from your Physalis vault and run SQL queries on PostgreSQL / MySQL / MariaDB via DB credentials stored in Physalis.",
   "keywords": [
     "n8n-community-node-package",

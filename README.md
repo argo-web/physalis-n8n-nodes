@@ -64,18 +64,39 @@ le nœud.
 
 **Convention de stockage côté Physalis** (mode From Physalis) :
 
-Pour chaque base de données, crée 5 Secrets dans un environnement, tous
-taggés avec le type de DB :
+Pour chaque base de données, crée des Secrets dans un environnement,
+tous taggés avec le type de DB (`postgres`, `mysql` ou `mariadb`). Le
+parser accepte **plusieurs conventions de naming** (case-insensitive,
+première clé trouvée prioritaire) :
 
-| Clé | Description | Requis ? |
+| Champ requis | Noms acceptés |
+|---|---|
+| **Host** | `HOST`, `POSTGRES_HOST`, `MYSQL_HOST`, `MARIADB_HOST`, `DB_HOST`, `HOST_NAME`, `HOSTNAME` |
+| **User** | `USER`, `POSTGRES_USER`, `MYSQL_USER`, `MARIADB_USER`, `DB_USER`, `USERNAME` |
+| **Password** | `PASSWORD`, `POSTGRES_PASSWORD`, `MYSQL_PASSWORD`, `MARIADB_PASSWORD`, `DB_PASSWORD`, `PWD` |
+| **Database** | `DATABASE`, `POSTGRES_DB`, `POSTGRES_DATABASE`, `MYSQL_DATABASE`, `MARIADB_DATABASE`, `DB_NAME`, `DB_DATABASE`, `DATABASE_NAME` |
+
+| Champ optionnel | Noms acceptés | Défaut |
 |---|---|---|
-| `NAME` | Nom de la base de données (ex: `voyages_prod`) | Oui |
-| `HOST` | Hostname / IP du serveur DB | Oui |
-| `USER` | Username DB | Oui |
-| `PASSWORD` | Password DB | Oui |
-| `PORT` | Port TCP | Optionnel (défaut: 5432 PG, 3306 MySQL/MariaDB) |
+| **Port** | `PORT`, `POSTGRES_PORT`, `MYSQL_PORT`, `MARIADB_PORT`, `DB_PORT` | 5432 (PG) / 3306 (MySQL/MariaDB) |
 
-Tous taggés `postgres` (ou `mysql` / `mariadb`).
+**Fallback URL** : si un secret `DATABASE_URL`, `POSTGRES_URL`,
+`MYSQL_URL` ou `MARIADB_URL` est présent, son contenu est parsé et
+comble les champs manquants. Les clés discrètes ci-dessus prennent
+priorité sur les composants de l'URL (utile quand ton `DATABASE_URL`
+pointe sur `localhost` mais que tu veux utiliser le hostname Docker
+via `HOST_NAME`).
+
+**Exemple typique** (convention Docker / .env Postgres) :
+```
+POSTGRES_USER=voyages
+POSTGRES_PASSWORD=voyages
+POSTGRES_PORT=5432
+HOST_NAME=voyages-postgres
+DATABASE_URL=postgres://voyages:voyages@localhost:5432/voyages
+```
+→ le parser reconstruit `postgres://voyages:voyages@voyages-postgres:5432/voyages`
+(`HOST_NAME` wins sur l'host de l'URL, et le DB name est extrait de l'URL).
 
 > 💡 Le SSL est détecté automatiquement. Les hosts publics (cloud :
 > Supabase, Neon, RDS, Render…) activent SSL. Les hosts locaux

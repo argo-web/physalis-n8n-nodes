@@ -48,19 +48,113 @@ export function defaultPort(type: DbType): number {
   return 3306; // mysql + mariadb
 }
 
+/// Candidats de clés pour chaque champ de connexion, par priorité.
+/// Première clé trouvée dans la map gagne. Convention :
+///   - Noms abstraits en premier (HOST, USER, PASSWORD, DATABASE)
+///   - Puis variantes Docker / .env classiques (POSTGRES_*, MYSQL_*,
+///     MARIADB_*, DB_*)
+///   - Puis variantes alternatives (HOST_NAME, USERNAME, PWD…)
+const HOST_KEYS = [
+  "HOST",
+  "POSTGRES_HOST",
+  "MYSQL_HOST",
+  "MARIADB_HOST",
+  "DB_HOST",
+  "HOST_NAME",
+  "HOSTNAME",
+];
+const PORT_KEYS = [
+  "PORT",
+  "POSTGRES_PORT",
+  "MYSQL_PORT",
+  "MARIADB_PORT",
+  "DB_PORT",
+];
+const USER_KEYS = [
+  "USER",
+  "POSTGRES_USER",
+  "MYSQL_USER",
+  "MARIADB_USER",
+  "DB_USER",
+  "USERNAME",
+];
+const PASSWORD_KEYS = [
+  "PASSWORD",
+  "POSTGRES_PASSWORD",
+  "MYSQL_PASSWORD",
+  "MARIADB_PASSWORD",
+  "DB_PASSWORD",
+  "PWD",
+];
+/// Pour la DB name (≠ display label) : on cherche le nom de la base.
+const DATABASE_KEYS = [
+  "DATABASE",
+  "POSTGRES_DB",
+  "POSTGRES_DATABASE",
+  "MYSQL_DATABASE",
+  "MARIADB_DATABASE",
+  "DB_NAME",
+  "DB_DATABASE",
+  "DATABASE_NAME",
+];
+/// URL complète (`postgres://user:pass@host:port/dbname`) — utilisée
+/// en fallback pour combler les champs manquants.
+const URL_KEYS = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "MYSQL_URL",
+  "MARIADB_URL",
+];
+
+function findFirst(
+  map: Map<string, string>,
+  keys: string[],
+): string | undefined {
+  for (const k of keys) {
+    const v = map.get(k);
+    if (v !== undefined && v !== "") return v;
+  }
+  return undefined;
+}
+
+/** Parse une URL de connexion DB style `postgres://user:pass@host:port/dbname`.
+ *  Renvoie un objet partiel — chaque champ peut être undefined si absent. */
+export function parseDbUrl(url: string): {
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+  database?: string;
+} {
+  try {
+    const u = new URL(url);
+    const port = u.port ? Number.parseInt(u.port, 10) : undefined;
+    const db = u.pathname.replace(/^\//, "");
+    return {
+      host: u.hostname || undefined,
+      port: port && Number.isInteger(port) ? port : undefined,
+      user: u.username ? decodeURIComponent(u.username) : undefined,
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+      database: db || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /** Reconstitue une DbConnection à partir d'une liste de Secrets Physalis.
- *  La liste vient de GET /api/integrations/credentials?type=secret&tag=<type>.
- *  Renvoie un message d'erreur explicite si une clé requise manque.
+ *  Convention flexible : accepte de nombreux noms de clés (cf. HOST_KEYS,
+ *  PORT_KEYS, USER_KEYS, PASSWORD_KEYS, DATABASE_KEYS).
  *
- *  Defensive parsing :
- *    - Accepte soit la shape attendue `[{key, value}, ...]`
- *    - Soit un fallback objet plat `[{NAME, HOST, USER, ...}]` (au cas où
- *      un intermédiaire transforme la réponse)
- *    - Normalise key (trim + uppercase) pour éviter les pièges
- *      whitespace / casse
- *    - Erreur explicite avec la liste des clés réellement trouvées pour
- *      aider au diagnostic
- */
+ *  Fallback URL : si une clé URL_KEYS (DATABASE_URL, POSTGRES_URL…) est
+ *  présente, ses champs comblent les manques. Les clés discrètes prennent
+ *  toujours la priorité sur les composants extraits de l'URL (utile quand
+ *  ton DATABASE_URL pointe sur localhost mais que HOST_NAME pointe sur
+ *  le container hostname Docker).
+ *
+ *  Le parser accepte 2 shapes en entrée :
+ *    - `[{ key: "NAME", value: "Voyages" }, ...]` (shape API Physalis)
+ *    - `[{ NAME: "Voyages", HOST: "..." }]` (objet plat — fallback) */
 export function parseConnectionFromSecrets(
   secrets: Array<unknown>,
   type: DbType,
@@ -88,21 +182,44 @@ export function parseConnectionFromSecrets(
     }
   }
 
-  const name = map.get("NAME");
-  const host = map.get("HOST");
-  const user = map.get("USER");
-  const password = map.get("PASSWORD");
-  const portRaw = map.get("PORT");
+  // Étape 1 : champs discrets (priorité absolue).
+  let host = findFirst(map, HOST_KEYS);
+  let portRaw = findFirst(map, PORT_KEYS);
+  let user = findFirst(map, USER_KEYS);
+  let password = findFirst(map, PASSWORD_KEYS);
+  let database = findFirst(map, DATABASE_KEYS);
+
+  // Étape 2 : URL fallback. Si une URL est présente, ses champs comblent
+  // les manques sans écraser les discrets déjà trouvés.
+  const urlValue = findFirst(map, URL_KEYS);
+  if (urlValue) {
+    const parsed = parseDbUrl(urlValue);
+    host = host ?? parsed.host;
+    if (!portRaw && parsed.port !== undefined) {
+      portRaw = String(parsed.port);
+    }
+    user = user ?? parsed.user;
+    password = password ?? parsed.password;
+    database = database ?? parsed.database;
+  }
 
   const missing: string[] = [];
-  if (!name) missing.push("NAME");
   if (!host) missing.push("HOST");
   if (!user) missing.push("USER");
   if (!password) missing.push("PASSWORD");
+  if (!database) missing.push("DATABASE");
   if (missing.length > 0) {
     const foundKeys = Array.from(map.keys()).sort();
     return {
-      error: `Missing required Physalis secret(s) for ${type}: ${missing.join(", ")}. Required keys: NAME, HOST, USER, PASSWORD (PORT is optional, defaults to ${defaultPort(type)}). Found keys: ${foundKeys.length > 0 ? foundKeys.join(", ") : "(none)"}.`,
+      error:
+        `Cannot build ${type} connection — missing: ${missing.join(", ")}. ` +
+        `Accepted key names (case-insensitive): ` +
+        `HOST=${HOST_KEYS.join("|")}, ` +
+        `USER=${USER_KEYS.join("|")}, ` +
+        `PASSWORD=${PASSWORD_KEYS.join("|")}, ` +
+        `DATABASE=${DATABASE_KEYS.join("|")}. ` +
+        `As an alternative, provide a full connection URL via one of: ${URL_KEYS.join("|")}. ` +
+        `Found keys in Physalis: ${foundKeys.length > 0 ? foundKeys.join(", ") : "(none)"}.`,
     };
   }
 
@@ -110,7 +227,7 @@ export function parseConnectionFromSecrets(
   if (portRaw) {
     const parsed = Number.parseInt(portRaw, 10);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-      return { error: `Invalid PORT value: ${portRaw} (must be 1-65535).` };
+      return { error: `Invalid port value: ${portRaw} (must be 1-65535).` };
     }
     port = parsed;
   }
@@ -121,7 +238,7 @@ export function parseConnectionFromSecrets(
     port,
     user: user!,
     password: password!,
-    database: name!,
+    database: database!,
   };
 }
 
