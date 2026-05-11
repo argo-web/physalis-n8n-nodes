@@ -1,13 +1,17 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "0.1.0",
-  "description": "n8n community node for Physalis — fetch secrets, services and accounts from your Physalis vault inside N8n workflows.",
+  "version": "0.2.0",
+  "description": "n8n community node for Physalis — fetch secrets/services/accounts from your Physalis vault and run SQL queries on PostgreSQL / MySQL / MariaDB via DB credentials stored in Physalis.",
   "keywords": [
     "n8n-community-node-package",
     "physalis",
     "secrets",
     "vault",
-    "credentials"
+    "credentials",
+    "sql",
+    "postgresql",
+    "mysql",
+    "mariadb"
   ],
   "license": "MIT",
   "homepage": "https://github.com/argo-web/physalis-n8n-nodes",
@@ -46,6 +50,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/pg": "^8.11.0",
     "@typescript-eslint/parser": "^7.15.0",
     "eslint": "^8.57.0",
     "eslint-plugin-n8n-nodes-base": "^1.16.0",
@@ -53,6 +58,10 @@
     "n8n-workflow": "^1.65.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "pg": "^8.13.0"
   },
   "peerDependencies": {
     "n8n-workflow": "*"

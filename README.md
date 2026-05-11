@@ -49,6 +49,80 @@ Une fois installé, le nœud **Physalis** apparaît dans le node picker
 
 ## Opérations supportées
 
+### Execute SQL (V0.2.0+)
+
+Connecte-toi à une base PostgreSQL / MySQL / MariaDB et exécute du SQL,
+avec credentials récupérés depuis Physalis ou remplis manuellement dans
+le nœud.
+
+**Source des credentials** :
+
+| Mode | Description |
+|---|---|
+| **From Physalis** (recommandé) | Récupère 5 Secrets dans Physalis taggés `postgres` / `mysql` / `mariadb` |
+| **Manual** | Remplit `host`, `port`, `user`, `password`, `database` directement dans le nœud |
+
+**Convention de stockage côté Physalis** (mode From Physalis) :
+
+Pour chaque base de données, crée 5 Secrets dans un environnement, tous
+taggés avec le type de DB :
+
+| Clé | Description | Requis ? |
+|---|---|---|
+| `NAME` | Nom de la base de données (ex: `voyages_prod`) | Oui |
+| `HOST` | Hostname / IP du serveur DB | Oui |
+| `USER` | Username DB | Oui |
+| `PASSWORD` | Password DB | Oui |
+| `PORT` | Port TCP | Optionnel (défaut: 5432 PG, 3306 MySQL/MariaDB) |
+
+Tous taggés `postgres` (ou `mysql` / `mariadb`).
+
+> 💡 Le SSL est détecté automatiquement. Les hosts publics (cloud :
+> Supabase, Neon, RDS, Render…) activent SSL. Les hosts locaux
+> (localhost, IPs RFC1918, `.local`) le désactivent.
+
+**Opérations SQL** :
+
+| Opération | Description |
+|---|---|
+| **Execute Query** | SQL arbitraire avec param binds positionnels (`$1`/`$2` PG, `?` MySQL). Pour SELECT, retourne 1 item N8n par row. Pour INSERT/UPDATE/DELETE, retourne 1 item avec `rowCount`. |
+| **List Schemas** | Retourne tous les schemas accessibles (PG) ou databases (MySQL). 1 item par schema. |
+| **List Tables** | Retourne les tables d'un schema (défaut `public` pour PG, current database pour MySQL). 1 item par table avec `table_name` + `table_type`. |
+
+**Exemple : query paramétrée PostgreSQL**
+
+```
+[Webhook]                    [Physalis: Execute SQL]
+  → user_id: 42         →    Source: From Physalis
+                             Project: voyages
+                             Env: production
+                             Tag: postgres
+                             SQL Op: Execute Query
+                             Query: SELECT name, email FROM users WHERE id = $1
+                             Parameters: {{ $json.user_id }}
+```
+
+**Exemple : insertion MySQL avec dynamic data**
+
+```
+[Set]                        [Physalis: Execute SQL]
+  → email, plan         →    Source: From Physalis
+                             Project: app
+                             Env: production
+                             Tag: mariadb
+                             SQL Op: Execute Query
+                             Query: INSERT INTO subscriptions (email, plan, created_at)
+                                    VALUES (?, ?, NOW())
+                             Parameters: {{ $json.email }},{{ $json.plan }}
+```
+
+⚠️ **Sécurité SQL injection** : utilise TOUJOURS les param binds plutôt
+que l'interpolation directe `{{ $json.x }}` dans la query. Les binds
+sont passés séparément par le driver et échappés correctement. Mettre
+les valeurs dynamiques dans le champ **Parameters**, pas dans **Query**.
+
+---
+
 ### Get Credentials
 
 Récupère secrets, services ou comptes applicatifs d'un projet, avec
@@ -127,6 +201,8 @@ Utile pour des workflows dynamiques qui itèrent sur plusieurs projets.
 | `getCredentials` (secret) | ✅ projets membres | ✅ scopes explicites + liste projets | ✅ projet+env unique |
 | `getCredentials` (service / account) | ✅ projets membres | ✅ idem | ❌ (pas de scope service côté machine) |
 | `listProjects` | ✅ tous les projets membres | ✅ projets autorisés (`PROJECTS_LIST` requis) | ✅ un seul projet |
+| `executeSql` (Physalis source) | ✅ projets membres | ✅ scope `SECRETS_READ` requis | ✅ projet+env unique |
+| `executeSql` (manual) | ✅ N/A — auth Bearer ignorée pour le mode manual | ✅ idem | ✅ idem |
 
 > Les **OrgSecrets** (clés globales de l'org type `GITHUB_DISPATCH_TOKEN`,
 > `REGISTRY_PAT`…) ne sont **jamais** accessibles via ce nœud, par design.
