@@ -49,6 +49,60 @@ Une fois installé, le nœud **Physalis** apparaît dans le node picker
 
 ## Opérations supportées
 
+### Send Email (V0.3.0+)
+
+Envoie un email via **Mailgun** (US ou EU), avec credentials stockés
+dans Physalis ou remplis manuellement.
+
+> V1 : provider Mailgun seul. V2 prévu : SendGrid, SMTP, AWS SES.
+
+**Convention de stockage côté Physalis** :
+
+Secrets dans un environnement, taggés `mailgun` (ou un autre tag de ton
+choix — configurable dans le nœud). Le parser accepte plusieurs alias :
+
+| Champ requis | Noms acceptés |
+|---|---|
+| **API Key** | `MAILGUN_API_KEY`, `MAILGUN_KEY`, `MAILGUN_SECRET_KEY`, `API_KEY`, `EMAIL_API_KEY` |
+| **Domain** | `MAILGUN_DOMAIN`, `MAIL_DOMAIN`, `EMAIL_DOMAIN`, `DOMAIN`, `SENDING_DOMAIN` |
+
+| Champ optionnel | Noms acceptés | Défaut |
+|---|---|---|
+| **Region** | `MAILGUN_REGION`, `EMAIL_REGION`, `REGION` | `us` (sinon `eu`) |
+| **Default From** | `MAILGUN_FROM`, `EMAIL_FROM`, `FROM`, `FROM_EMAIL`, `SENDER`, `DEFAULT_FROM` | — (override par le champ From du nœud sinon obligatoire) |
+
+**Champs du nœud** :
+
+| Champ | Description |
+|---|---|
+| **From** | `Name <addr@domain>` ou `addr@domain`. Fallback sur le secret FROM si vide. |
+| **To** | Une ou plusieurs adresses séparées par virgules |
+| **Subject** | Sujet du mail |
+| **Text Body** | Plain text (au moins un body requis : text ou HTML) |
+| **HTML Body** | HTML (multipart alternative si combiné avec Text) |
+| **CC** / **BCC** | Destinataires copie / copie cachée (csv) |
+| **Reply To** | Header Reply-To |
+| **Tags** | Mailgun analytics tags (max 3) — csv |
+
+**Exemple** :
+
+```
+[Webhook]                    [Physalis: Send Email]
+  → email, name         →    Source: From Physalis
+                             Project: voyages
+                             Env: production
+                             Tag: mailgun
+                             From: Acme <noreply@mg.acme.fr>
+                             To: {{ $json.email }}
+                             Subject: Welcome {{ $json.name }}
+                             HTML Body: <h1>Hi {{ $json.name }}</h1>
+                             Tags: welcome, onboarding
+```
+
+**Sortie** : 1 item N8n avec `{ ok, provider, region, id, message, from, to, subject }`. Sur erreur Mailgun (4xx/5xx), throw `NodeOperationError` avec le détail du serveur.
+
+---
+
 ### Execute SQL (V0.2.0+)
 
 Connecte-toi à une base PostgreSQL / MySQL / MariaDB et exécute du SQL,
@@ -224,6 +278,8 @@ Utile pour des workflows dynamiques qui itèrent sur plusieurs projets.
 | `listProjects` | ✅ tous les projets membres | ✅ projets autorisés (`PROJECTS_LIST` requis) | ✅ un seul projet |
 | `executeSql` (Physalis source) | ✅ projets membres | ✅ scope `SECRETS_READ` requis | ✅ projet+env unique |
 | `executeSql` (manual) | ✅ N/A — auth Bearer ignorée pour le mode manual | ✅ idem | ✅ idem |
+| `sendEmail` (Physalis source) | ✅ projets membres | ✅ scope `SECRETS_READ` requis | ✅ projet+env unique |
+| `sendEmail` (manual) | ✅ N/A — auth Bearer ignorée pour le mode manual | ✅ idem | ✅ idem |
 
 > Les **OrgSecrets** (clés globales de l'org type `GITHUB_DISPATCH_TOKEN`,
 > `REGISTRY_PAT`…) ne sont **jamais** accessibles via ce nœud, par design.

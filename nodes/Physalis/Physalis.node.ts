@@ -18,6 +18,13 @@ import {
   type SqlOperation,
   type SslMode,
 } from "./sql";
+import {
+  type MailgunCredentials,
+  type MailgunRegion,
+  parseCsvList,
+  parseMailgunFromSecrets,
+  sendMailgunEmail,
+} from "./email";
 
 /**
  * Physalis — nœud N8n pour récupérer secrets / services / comptes
@@ -92,6 +99,13 @@ export class Physalis implements INodeType {
             description:
               "Connect to a PostgreSQL / MySQL / MariaDB database (credentials from Physalis or manual) and execute a query, list schemas or list tables",
             action: "Execute SQL",
+          },
+          {
+            name: "Send Email",
+            value: "sendEmail",
+            description:
+              "Send an email via Mailgun (credentials from Physalis or manual). Supports HTML + text body, CC/BCC, Reply-To, tags.",
+            action: "Send email",
           },
         ],
         default: "getCredentials",
@@ -483,6 +497,255 @@ export class Physalis implements INodeType {
           },
         },
       },
+
+      // ═══ Send Email operation ═════════════════════════════════════
+      // Cf. nodes/Physalis/email.ts pour la convention de stockage des
+      // credentials Mailgun côté Physalis.
+
+      // ─── Provider selector (V1 : Mailgun seul) ────────────────────
+      {
+        displayName: "Email Provider",
+        name: "emailProvider",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          {
+            name: "Mailgun",
+            value: "mailgun",
+            description: "Send via the Mailgun HTTP API (US or EU region)",
+          },
+        ],
+        default: "mailgun",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+
+      // ─── Credentials source (Physalis ou Manual) ──────────────────
+      {
+        displayName: "Credentials Source",
+        name: "emailCredentialsSource",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          {
+            name: "From Physalis",
+            value: "physalis",
+            description:
+              "Load Mailgun credentials (API key, domain, region) from Physalis Secrets tagged with the provider name",
+          },
+          {
+            name: "Manual",
+            value: "manual",
+            description: "Fill credentials directly (API key, domain, region)",
+          },
+        ],
+        default: "physalis",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+
+      // ── Physalis source : project + env + tag ──
+      {
+        displayName: "Project Name or ID",
+        name: "emailProject",
+        type: "options",
+        typeOptions: { loadOptionsMethod: "loadProjects" },
+        required: true,
+        default: "",
+        description:
+          'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["physalis"],
+          },
+        },
+      },
+      {
+        displayName: "Environment",
+        name: "emailEnv",
+        type: "string",
+        default: "production",
+        placeholder: "production",
+        required: true,
+        description: 'Environment name (e.g. production, staging) containing the Mailgun secrets',
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["physalis"],
+          },
+        },
+      },
+      {
+        displayName: "Tag",
+        name: "emailTag",
+        type: "string",
+        default: "mailgun",
+        required: true,
+        description: 'Tag applied to the Mailgun secrets in Physalis (API_KEY, DOMAIN, REGION?, FROM?)',
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["physalis"],
+          },
+        },
+      },
+
+      // ── Manual source : champs Mailgun directs ──
+      {
+        displayName: "API Key",
+        name: "manualMailgunApiKey",
+        type: "string",
+        typeOptions: { password: true },
+        default: "",
+        required: true,
+        description: 'Mailgun API key (starts with \'key-\' or longer hex string)',
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["manual"],
+          },
+        },
+      },
+      {
+        displayName: "Domain",
+        name: "manualMailgunDomain",
+        type: "string",
+        default: "",
+        required: true,
+        placeholder: "mg.example.com",
+        description: 'Sending domain configured in Mailgun (without https://)',
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["manual"],
+          },
+        },
+      },
+      {
+        displayName: "Region",
+        name: "manualMailgunRegion",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          { name: "US", value: "us" },
+          { name: "EU", value: "eu" },
+        ],
+        default: "us",
+        displayOptions: {
+          show: {
+            operation: ["sendEmail"],
+            emailCredentialsSource: ["manual"],
+          },
+        },
+      },
+
+      // ─── Email fields (common to both sources) ────────────────────
+      {
+        displayName: "From",
+        name: "emailFrom",
+        type: "string",
+        default: "",
+        placeholder: "Acme <noreply@example.com>",
+        description: 'Sender address. Either "Name &lt;addr@domain&gt;" or just "addr@domain". If empty, falls back to a FROM secret stored in Physalis (when using From Physalis source).',
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "To",
+        name: "emailTo",
+        type: "string",
+        default: "",
+        required: true,
+        placeholder: "user@example.com, other@example.com",
+        description:
+          "Recipient address(es). Multiple addresses separated by commas. Each gets a separate copy.",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "Subject",
+        name: "emailSubject",
+        type: "string",
+        default: "",
+        required: true,
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "Text Body",
+        name: "emailText",
+        type: "string",
+        typeOptions: { rows: 3 },
+        default: "",
+        description:
+          "Plain text body of the email. At least one of Text Body / HTML Body must be filled.",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "HTML Body",
+        name: "emailHtml",
+        type: "string",
+        typeOptions: { rows: 5 },
+        default: "",
+        description:
+          "HTML body of the email. Will be sent alongside Text Body as a multipart alternative if both are provided.",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "CC",
+        name: "emailCc",
+        type: "string",
+        default: "",
+        placeholder: "manager@example.com, team@example.com",
+        description: "Optional. Comma-separated CC addresses.",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "BCC",
+        name: "emailBcc",
+        type: "string",
+        default: "",
+        placeholder: "archive@example.com",
+        description: "Optional. Comma-separated BCC addresses (hidden from recipients).",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "Reply To",
+        name: "emailReplyTo",
+        type: "string",
+        default: "",
+        placeholder: "support@example.com",
+        description: "Optional. Reply-To header (where replies are sent).",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
+      {
+        displayName: "Tags",
+        name: "emailTags",
+        type: "string",
+        default: "",
+        placeholder: "welcome, onboarding",
+        description:
+          "Optional. Comma-separated Mailgun tags (max 3) for analytics / segmentation in the Mailgun dashboard.",
+        displayOptions: {
+          show: { operation: ["sendEmail"] },
+        },
+      },
     ],
   };
 
@@ -760,6 +1023,145 @@ export class Physalis implements INodeType {
           for (const row of result.rows) {
             returnData.push({ json: row as IDataObject });
           }
+        }
+        continue;
+      }
+
+      if (operation === "sendEmail") {
+        const source = this.getNodeParameter(
+          "emailCredentialsSource",
+          i,
+        ) as "physalis" | "manual";
+
+        let credentials: MailgunCredentials;
+
+        if (source === "physalis") {
+          const emailProject = this.getNodeParameter("emailProject", i) as string;
+          const emailEnv = this.getNodeParameter("emailEnv", i) as string;
+          const emailTag = this.getNodeParameter("emailTag", i) as string;
+          const params = new URLSearchParams({
+            project: emailProject,
+            env: emailEnv,
+            type: "secret",
+            tag: emailTag,
+          });
+          const response =
+            await this.helpers.httpRequestWithAuthentication.call(
+              this,
+              "physalisApi",
+              {
+                method: "GET",
+                url: `${vaultUrl}/api/integrations/credentials?${params.toString()}`,
+                json: true,
+              },
+            );
+          const secrets =
+            (response as { items?: Array<{ key: string; value: string }> })
+              .items ?? [];
+          if (secrets.length === 0) {
+            throw new NodeOperationError(
+              this.getNode(),
+              `No secrets found in Physalis with tag "${emailTag}" in project ${emailProject}/${emailEnv}. Required keys: an API_KEY alias + DOMAIN alias (REGION + FROM optional).`,
+            );
+          }
+          const parsed = parseMailgunFromSecrets(secrets);
+          if ("error" in parsed) {
+            throw new NodeOperationError(this.getNode(), parsed.error);
+          }
+          credentials = parsed;
+        } else {
+          const apiKey = this.getNodeParameter(
+            "manualMailgunApiKey",
+            i,
+          ) as string;
+          const domain = this.getNodeParameter(
+            "manualMailgunDomain",
+            i,
+          ) as string;
+          const region = this.getNodeParameter(
+            "manualMailgunRegion",
+            i,
+          ) as MailgunRegion;
+          credentials = { apiKey, domain, region };
+        }
+
+        const fromInput = (
+          this.getNodeParameter("emailFrom", i, "") as string
+        ).trim();
+        const from = fromInput || credentials.defaultFrom;
+        if (!from) {
+          throw new NodeOperationError(
+            this.getNode(),
+            "From address is required (either fill the From field or store a FROM secret tagged with the email provider).",
+          );
+        }
+
+        const toRaw = this.getNodeParameter("emailTo", i) as string;
+        const to = parseCsvList(toRaw);
+        if (to.length === 0) {
+          throw new NodeOperationError(
+            this.getNode(),
+            "To address is required (at least one recipient).",
+          );
+        }
+
+        const subject = this.getNodeParameter("emailSubject", i) as string;
+        const text = (
+          this.getNodeParameter("emailText", i, "") as string
+        ) || undefined;
+        const html = (
+          this.getNodeParameter("emailHtml", i, "") as string
+        ) || undefined;
+        if (!text && !html) {
+          throw new NodeOperationError(
+            this.getNode(),
+            "At least one of Text Body / HTML Body must be filled.",
+          );
+        }
+
+        const cc = parseCsvList(
+          this.getNodeParameter("emailCc", i, "") as string,
+        );
+        const bcc = parseCsvList(
+          this.getNodeParameter("emailBcc", i, "") as string,
+        );
+        const replyTo = (
+          this.getNodeParameter("emailReplyTo", i, "") as string
+        ).trim();
+        const tags = parseCsvList(
+          this.getNodeParameter("emailTags", i, "") as string,
+        );
+
+        try {
+          const result = await sendMailgunEmail({
+            credentials,
+            from,
+            to,
+            subject,
+            text,
+            html,
+            cc: cc.length > 0 ? cc : undefined,
+            bcc: bcc.length > 0 ? bcc : undefined,
+            replyTo: replyTo || undefined,
+            tags: tags.length > 0 ? tags : undefined,
+          });
+          returnData.push({
+            json: {
+              ok: true,
+              provider: "mailgun",
+              region: credentials.region,
+              id: result.id,
+              message: result.message,
+              from,
+              to,
+              subject,
+            } as IDataObject,
+          });
+        } catch (err) {
+          throw new NodeOperationError(
+            this.getNode(),
+            err instanceof Error ? err.message : String(err),
+          );
         }
         continue;
       }
