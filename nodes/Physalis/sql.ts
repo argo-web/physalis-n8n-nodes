@@ -50,12 +50,43 @@ export function defaultPort(type: DbType): number {
 
 /** Reconstitue une DbConnection à partir d'une liste de Secrets Physalis.
  *  La liste vient de GET /api/integrations/credentials?type=secret&tag=<type>.
- *  Renvoie un message d'erreur explicite si une clé requise manque. */
+ *  Renvoie un message d'erreur explicite si une clé requise manque.
+ *
+ *  Defensive parsing :
+ *    - Accepte soit la shape attendue `[{key, value}, ...]`
+ *    - Soit un fallback objet plat `[{NAME, HOST, USER, ...}]` (au cas où
+ *      un intermédiaire transforme la réponse)
+ *    - Normalise key (trim + uppercase) pour éviter les pièges
+ *      whitespace / casse
+ *    - Erreur explicite avec la liste des clés réellement trouvées pour
+ *      aider au diagnostic
+ */
 export function parseConnectionFromSecrets(
-  secrets: Array<{ key: string; value: string }>,
+  secrets: Array<unknown>,
   type: DbType,
 ): DbConnection | { error: string } {
-  const map = new Map(secrets.map((s) => [s.key.toUpperCase(), s.value]));
+  const map = new Map<string, string>();
+
+  for (const raw of secrets) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+
+    // Shape 1 (attendue) : { key: "NAME", value: "Voyages", ... }
+    if (typeof item.key === "string") {
+      const k = String(item.key).trim().toUpperCase();
+      if (k) map.set(k, String(item.value ?? ""));
+      continue;
+    }
+
+    // Shape 2 (fallback) : objet plat { NAME: "Voyages", HOST: "...", ... }
+    for (const [rawKey, rawVal] of Object.entries(item)) {
+      const k = String(rawKey).trim().toUpperCase();
+      if (!k) continue;
+      // Skip metadata fields qui ne sont pas des secrets DB
+      if (k === "CATEGORY" || k === "TAGS" || k === "KEY" || k === "VALUE") continue;
+      map.set(k, String(rawVal ?? ""));
+    }
+  }
 
   const name = map.get("NAME");
   const host = map.get("HOST");
@@ -69,8 +100,9 @@ export function parseConnectionFromSecrets(
   if (!user) missing.push("USER");
   if (!password) missing.push("PASSWORD");
   if (missing.length > 0) {
+    const foundKeys = Array.from(map.keys()).sort();
     return {
-      error: `Missing required Physalis secret(s) for ${type}: ${missing.join(", ")}. Required keys: NAME, HOST, USER, PASSWORD (PORT is optional, defaults to ${defaultPort(type)}).`,
+      error: `Missing required Physalis secret(s) for ${type}: ${missing.join(", ")}. Required keys: NAME, HOST, USER, PASSWORD (PORT is optional, defaults to ${defaultPort(type)}). Found keys: ${foundKeys.length > 0 ? foundKeys.join(", ") : "(none)"}.`,
     };
   }
 
