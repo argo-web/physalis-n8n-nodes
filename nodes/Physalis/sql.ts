@@ -22,6 +22,8 @@ import mysql from "mysql2/promise";
 
 export type DbType = "postgres" | "mysql" | "mariadb";
 
+export type SslMode = "auto" | "disable" | "require";
+
 export type DbConnection = {
   type: DbType;
   host: string;
@@ -29,7 +31,10 @@ export type DbConnection = {
   user: string;
   password: string;
   database: string;
-  ssl?: boolean;
+  /// Mode SSL. Si "auto", on utilise needsSsl(host) pour décider.
+  /// "disable" force off (utile pour les containers Docker qui n'ont pas
+  /// SSL). "require" force on avec self-signed certs acceptés.
+  sslMode?: SslMode;
 };
 
 /** Convention de mapping : un tag Physalis → un type de driver.
@@ -288,12 +293,8 @@ async function runPostgres(opts: {
     user: connection.user,
     password: connection.password,
     database: connection.database,
-    // SSL : auto-détection. Si l'host est un .neon.tech, .supabase.co,
-    // .amazonaws.com (RDS), .render.com → SSL obligatoire. Pour les
-    // hosts internes (localhost, IPs privées), SSL désactivé.
-    ssl: needsSsl(connection.host)
-      ? { rejectUnauthorized: false }
-      : undefined,
+    // SSL : résolu via sslMode (auto / disable / require). Cf. resolveSsl.
+    ssl: resolveSsl(connection) ? { rejectUnauthorized: false } : undefined,
     // 5s timeout pour la connexion — évite de bloquer les workflows si
     // la DB est inaccessible.
     connectionTimeoutMillis: 5000,
@@ -355,7 +356,7 @@ async function runMysql(opts: {
     user: connection.user,
     password: connection.password,
     database: connection.database,
-    ssl: needsSsl(connection.host) ? {} : undefined,
+    ssl: resolveSsl(connection) ? {} : undefined,
     connectTimeout: 5000,
   });
 
@@ -418,15 +419,27 @@ async function runMysql(opts: {
 // ─── SSL detection ───────────────────────────────────────────────────
 
 /** Heuristique : les hosts cloud connus exigent SSL. Les hosts internes
- *  (localhost, IPs RFC1918, .local) le désactivent. Le user peut override
- *  via le champ SSL du nœud (option future). */
-function needsSsl(host: string): boolean {
+ *  (localhost, IPs RFC1918, .local, Docker container hostnames sans
+ *  point) le désactivent. Le mode SSL du nœud peut override (auto /
+ *  disable / require). */
+function needsSslAuto(host: string): boolean {
   const h = host.toLowerCase();
   if (h === "localhost" || h === "127.0.0.1" || h === "::1") return false;
   if (/^10\./.test(h)) return false;
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
   if (/^192\.168\./.test(h)) return false;
   if (h.endsWith(".local") || h.endsWith(".internal")) return false;
+  // Hostname sans point = container Docker / Kubernetes service / DNS
+  // interne (ex: voyages-postgres, postgres, db, my-database).
+  if (!h.includes(".")) return false;
   // Tous les autres = considérés comme publics → SSL recommandé
   return true;
+}
+
+/** Résout le besoin SSL pour une connexion en fonction du mode demandé. */
+export function resolveSsl(connection: DbConnection): boolean {
+  const mode = connection.sslMode ?? "auto";
+  if (mode === "disable") return false;
+  if (mode === "require") return true;
+  return needsSslAuto(connection.host);
 }

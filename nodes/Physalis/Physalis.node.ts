@@ -16,6 +16,7 @@ import {
   parseConnectionFromSecrets,
   runSqlOperation,
   type SqlOperation,
+  type SslMode,
 } from "./sql";
 
 /**
@@ -370,6 +371,38 @@ export class Physalis implements INodeType {
         },
       },
 
+      // ─── SSL mode (common to physalis + manual sources) ──────────
+      {
+        displayName: "SSL Mode",
+        name: "sqlSslMode",
+        type: "options",
+        noDataExpression: true,
+        options: [
+          {
+            name: "Auto",
+            value: "auto",
+            description:
+              "Default. SSL enabled for public hosts (cloud DBs), disabled for localhost / Docker containers / private IPs.",
+          },
+          {
+            name: "Disable",
+            value: "disable",
+            description:
+              "Connect without SSL. Use for local Docker / self-hosted PG without SSL configured (typical error: 'server does not support SSL connections').",
+          },
+          {
+            name: "Require",
+            value: "require",
+            description:
+              "Force SSL. Use when auto-detection fails for a managed DB. Self-signed certs are accepted.",
+          },
+        ],
+        default: "auto",
+        displayOptions: {
+          show: { operation: ["executeSql"] },
+        },
+      },
+
       // ─── SQL operation selector ───────────────────────────────────
       {
         displayName: "SQL Operation",
@@ -668,6 +701,15 @@ export class Physalis implements INodeType {
             database,
           };
         }
+
+        // Override du sslMode depuis le selector du nœud (commun aux 2
+        // sources). "auto" = utilise la détection par hostname (cf.
+        // resolveSsl dans sql.ts).
+        dbConnection.sslMode = this.getNodeParameter(
+          "sqlSslMode",
+          i,
+          "auto",
+        ) as SslMode;
 
         // Paramètres spécifiques à l'opération SQL choisie.
         let query: string | undefined;
