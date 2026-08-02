@@ -6,12 +6,12 @@
   "resources": {
     "credentialDocumentation": [
       {
-        "url": "https://github.com/argo-web/physalis-n8n-nodes#readme"
+        "url": "https://physalis.cloud/en/docs"
       }
     ],
     "primaryDocumentation": [
       {
-        "url": "https://github.com/argo-web/physalis-n8n-nodes#readme"
+        "url": "https://physalis.cloud/en/docs"
       }
     ]
   }

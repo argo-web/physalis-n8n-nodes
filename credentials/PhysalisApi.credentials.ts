@@ -26,7 +26,7 @@ export class PhysalisApi implements ICredentialType {
 
   // eslint-disable-next-line n8n-nodes-base/cred-class-field-documentation-url-miscased
   documentationUrl =
-    "https://github.com/argo-web/physalis-n8n-nodes#readme";
+    "https://physalis.cloud/en/docs";
 
   properties: INodeProperties[] = [
     {

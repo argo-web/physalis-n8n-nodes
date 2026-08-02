@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "n8n community node for Physalis — fetch secrets/services/accounts, run SQL queries on PostgreSQL/MySQL/MariaDB, and send emails via Mailgun, all using credentials stored securely in your Physalis vault.",
   "keywords": [
     "n8n-community-node-package",
@@ -16,13 +16,13 @@
     "email"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/argo-web/physalis-n8n-nodes",
+  "homepage": "https://physalis.cloud/en/docs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/argo-web/physalis-n8n-nodes.git"
+    "url": "git+https://github.com/physalis-cloud/physalis-n8n-nodes.git"
   },
   "bugs": {
-    "url": "https://github.com/argo-web/physalis-n8n-nodes/issues"
+    "url": "https://github.com/physalis-cloud/physalis-n8n-nodes/issues"
   },
   "author": {
     "name": "Argoweb",

@@ -63,6 +63,12 @@ export class Physalis implements INodeType {
       {
         name: "physalisApi",
         required: true,
+        displayOptions: {
+          hide: {
+            operation: ["executeSql"],
+            credentialsSource: ["manual"],
+          },
+        },
       },
     ],
     requestDefaults: {
@@ -300,11 +306,18 @@ export class Physalis implements INodeType {
         displayName: "DB Type",
         name: "manualDbType",
         type: "options",
-        noDataExpression: true,
+        // noDataExpression intentionally omitted → supports expressions from
+        // incoming data (e.g. {{ $json.dbType }} from a Physalis rotation webhook).
+        // Accepted values: postgres, postgresql, POSTGRESQL, mysql, MYSQL,
+        // mariadb (case-insensitive, via dbTypeFromTag normalization).
         options: [
           { name: "PostgreSQL", value: "postgres" },
           { name: "MySQL", value: "mysql" },
           { name: "MariaDB", value: "mariadb" },
+          {
+            name: "MongoDB (Webhook Strategy Only)",
+            value: "mongodb",
+          },
         ],
         default: "postgres",
         required: true,
@@ -830,8 +843,19 @@ export class Physalis implements INodeType {
 
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
     const operation = this.getNodeParameter("operation", 0) as string;
-    const credentials = await this.getCredentials("physalisApi");
-    const vaultUrl = String(credentials.vaultUrl ?? "").replace(/\/$/, "");
+    const credentialsSource = operation === "executeSql"
+      ? (this.getNodeParameter("credentialsSource", 0, "physalis") as string)
+      : "physalis";
+
+    // PhysalisApi credentials are not needed for executeSql + manual mode
+    // (the node connects directly to the DB using parameters from previous nodes).
+    const needsPhysalisAuth = !(operation === "executeSql" && credentialsSource === "manual");
+    const credentials = needsPhysalisAuth
+      ? await this.getCredentials("physalisApi")
+      : null;
+    const vaultUrl = credentials
+      ? String(credentials.vaultUrl ?? "").replace(/\/$/, "")
+      : "";
 
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
@@ -949,7 +973,16 @@ export class Physalis implements INodeType {
           dbConnection = parsed;
         } else {
           // Manual : prend les champs du nœud directement.
-          const dbType = this.getNodeParameter("manualDbType", i) as DbType;
+          // Normalise via dbTypeFromTag pour accepter aussi les valeurs Physalis
+          // (POSTGRESQL, MYSQL) passées par expression depuis un payload webhook.
+          const dbTypeRaw = this.getNodeParameter("manualDbType", i) as string;
+          const dbType = dbTypeFromTag(dbTypeRaw);
+          if (!dbType) {
+            throw new NodeOperationError(
+              this.getNode(),
+              `DB type "${dbTypeRaw}" not supported. Accepted: postgres / postgresql, mysql, mariadb. MongoDB requires the Webhook rotation strategy.`,
+            );
+          }
           const host = this.getNodeParameter("manualHost", i) as string;
           const portRaw = this.getNodeParameter("manualPort", i, 0) as number;
           const user = this.getNodeParameter("manualUser", i) as string;

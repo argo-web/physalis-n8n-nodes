@@ -350,5 +350,7 @@ MIT © [Argoweb](https://argoweb.fr)
 
 - [Physalis](https://physalis.cloud)
 - [Documentation Physalis](https://physalis.cloud/docs)
-- [Issues](https://github.com/argo-web/physalis-n8n-nodes/issues)
+- [Documentation Physalis — intégration n8n](https://physalis.cloud/en/docs/n8n-integration)
+- [Toute la documentation](https://physalis.cloud/en/docs)
+- [Issues](https://github.com/physalis-cloud/physalis-n8n-nodes/issues)
 - [N8n Community Nodes](https://docs.n8n.io/integrations/community-nodes/)
