@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "n8n community node for Physalis — fetch secrets/services/accounts, run SQL queries on PostgreSQL/MySQL/MariaDB, and send emails via Mailgun, all using credentials stored securely in your Physalis vault.",
   "keywords": [
     "n8n-community-node-package",
