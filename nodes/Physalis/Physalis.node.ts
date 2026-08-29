@@ -117,6 +117,70 @@ export class Physalis implements INodeType {
         default: "getCredentials",
       },
 
+      // ─── Source (operation: getCredentials) ───────────────────────
+      // Un secret de PROJET est scopé projet × environnement : il sert à
+      // déployer une application. Un secret d'ÉQUIPE (webhook, clé de veille,
+      // jeton partagé) n'appartient à aucun projet — le forcer dans l'un d'eux
+      // oblige à en choisir un arbitrairement.
+      {
+        displayName: "Source",
+        name: "source",
+        type: "options",
+        noDataExpression: true,
+        required: true,
+        options: [
+          {
+            name: "Project",
+            value: "project",
+            description: "Secrets, services and accounts scoped to a project and environment",
+          },
+          {
+            name: "Team Vault",
+            value: "team_vault",
+            description: "Shared team secrets that belong to no project (webhooks, watch keys)",
+          },
+        ],
+        default: "project",
+        displayOptions: {
+          show: { operation: ["getCredentials"] },
+        },
+      },
+
+      // ─── Collection (uniquement si source=team_vault) ─────────────
+      {
+        displayName: "Collection",
+        name: "collection",
+        type: "string",
+        required: true,
+        default: "",
+        placeholder: "automatisation",
+        description: "Slug of the team vault collection to read from",
+        displayOptions: {
+          show: { operation: ["getCredentials"], source: ["team_vault"] },
+        },
+      },
+      {
+        displayName: "Tag",
+        name: "collectionTag",
+        type: "string",
+        default: "",
+        placeholder: "slack",
+        description: "Filter entries by tag. Leave empty to return the whole collection.",
+        displayOptions: {
+          show: { operation: ["getCredentials"], source: ["team_vault"] },
+        },
+      },
+      {
+        displayName: "Entry Name",
+        name: "collectionKey",
+        type: "string",
+        default: "",
+        description: "Filter by exact entry name. Leave empty to return all matching entries.",
+        displayOptions: {
+          show: { operation: ["getCredentials"], source: ["team_vault"] },
+        },
+      },
+
       // ─── Project selector (operation: getCredentials) ─────────────
       // displayName "Name or ID" : convention n8n pour les options dynamiques.
       {
@@ -131,7 +195,7 @@ export class Physalis implements INodeType {
         description:
           'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
         displayOptions: {
-          show: { operation: ["getCredentials"] },
+          show: { operation: ["getCredentials"], source: ["project"] },
         },
       },
 
@@ -162,7 +226,7 @@ export class Physalis implements INodeType {
         ],
         default: "secret",
         displayOptions: {
-          show: { operation: ["getCredentials"] },
+          show: { operation: ["getCredentials"], source: ["project"] },
         },
       },
 
@@ -178,6 +242,7 @@ export class Physalis implements INodeType {
         displayOptions: {
           show: {
             operation: ["getCredentials"],
+            source: ["project"],
             type: ["secret"],
           },
         },
@@ -212,6 +277,7 @@ export class Physalis implements INodeType {
         displayOptions: {
           show: {
             operation: ["getCredentials"],
+            source: ["project"],
             type: ["secret"],
           },
         },
@@ -884,6 +950,44 @@ export class Physalis implements INodeType {
       }
 
       if (operation === "getCredentials") {
+        // ⚠️ Défaut "project" et non une lecture nue : les workflows créés avec
+        // les versions ≤ 0.3.x n'ont pas ce paramètre. Sans ce défaut, ils
+        // casseraient à la première exécution après mise à jour du nœud.
+        const source = this.getNodeParameter("source", i, "project") as
+          | "project"
+          | "team_vault";
+
+        if (source === "team_vault") {
+          const collection = this.getNodeParameter("collection", i) as string;
+          const collectionTag =
+            (this.getNodeParameter("collectionTag", i, "") as string) || "";
+          const collectionKey =
+            (this.getNodeParameter("collectionKey", i, "") as string) || "";
+
+          const params = new URLSearchParams({
+            type: "team_vault",
+            collection,
+          });
+          if (collectionTag) params.set("tag", collectionTag);
+          if (collectionKey) params.set("key", collectionKey);
+
+          const response =
+            await this.helpers.httpRequestWithAuthentication.call(
+              this,
+              "physalisApi",
+              {
+                method: "GET",
+                url: `${vaultUrl}/api/integrations/credentials?${params.toString()}`,
+                json: true,
+              },
+            );
+          const fetched = (response as { items?: IDataObject[] }).items ?? [];
+          for (const it of fetched) {
+            returnData.push({ json: it });
+          }
+          continue;
+        }
+
         const project = this.getNodeParameter("project", i) as string;
         const type = this.getNodeParameter("type", i) as
           | "secret"

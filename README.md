@@ -49,6 +49,34 @@ Une fois installé, le nœud **Physalis** apparaît dans le node picker
 
 ## Opérations supportées
 
+### Coffre d'équipe (V0.4.0+)
+
+Le champ **Source** de *Get Credentials* choisit d'où viennent les secrets :
+
+| Source | Pour quoi |
+|---|---|
+| **Project** | secrets, services et comptes scopés `projet × environnement` — ce qui sert à **déployer** une application |
+| **Team Vault** | secrets d'**équipe** qui n'appartiennent à aucun projet : URL de webhook, clé de veille, jeton partagé |
+
+En *Team Vault*, on renseigne le **slug de la collection**, plus éventuellement
+un **tag** et un **nom d'entrée**. La sortie a la même forme que pour un secret
+de projet — `key`, `value`, plus `url`, `username` et `tags` — donc
+`{{ $json.value }}` fonctionne à l'identique des deux côtés.
+
+> **Pourquoi cette distinction ?** Une URL de webhook Slack n'a ni projet ni
+> environnement. La ranger dans un projet oblige à en choisir un arbitrairement,
+> et cette dette se paie à chaque automatisation suivante.
+
+⚠️ **Un token machine ne peut pas lire le coffre d'équipe.** Il est verrouillé
+sur un projet ET un environnement ; une collection d'équipe n'a ni l'un ni
+l'autre. Utilisez un token **utilisateur** (`sv_user_…`) ou **organisation**
+(`sv_org_…`).
+
+⚠️ Les workflows créés avec une version ≤ 0.3.x continuent de fonctionner : sans
+le champ `Source`, le nœud retombe sur `project`.
+
+---
+
 ### Send Email (V0.3.0+)
 
 Envoie un email via **Mailgun** (US ou EU), avec credentials stockés
