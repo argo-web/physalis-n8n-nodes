@@ -1,0 +1,42 @@
+# Dependabot — montées de version.
+#
+# ⚠️ C'est un outil AUTRE que le scan de CVE de .github/workflows/security.yml
+# (là où il existe). Un scanner dit « tu es vulnérable » ; Dependabot dit « une
+# version plus récente existe » et ouvre la PR. Les alertes de sécurité GitHub,
+# elles, sont un réglage du dépôt (aucun fichier) et ne corrigent rien seules :
+# il faut les trois.
+#
+# Groupage : le bruit est ce qui tue ce genre d'outil. Les patch/mineures
+# arrivent en UNE PR par écosystème ; les majeures restent individuelles, parce
+# qu'elles se relisent une par une.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    groups:
+      mineures-et-correctifs:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch
