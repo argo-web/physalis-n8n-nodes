@@ -1,0 +1,91 @@
+# Publication npm AVEC PROVENANCE.
+#
+# ⚠️ Ce fichier n'est pas un confort de CI : depuis le 2026-05-01, la
+# vérification des nœuds communautaires n8n EXIGE une publication attestée. La
+# 0.4.0 avait été publiée à la main et ne porte aucun `dist.attestations` — elle
+# aurait été refusée pour ce seul motif, sans que rien dans le code soit en
+# cause.
+#
+# La provenance impose quatre conditions, et il suffit d'en manquer une pour que
+# npm publie SANS attestation, en silence :
+#   - `id-token: write` sur le job (c'est l'OIDC qui signe) ;
+#   - un runner GitHub-hosted et un dépôt public ;
+#   - npm >= 9.5 — d'où le pin de Node 22, qui porte npm 10 ;
+#   - `--provenance` sur la ligne de commande.
+#
+# ⚠️ Le publish est fait à partir du TAG, et le job refuse si le tag ne
+# correspond pas à la `version` du package.json. Sans cette garde, un tag posé
+# de travers publierait une version que personne n'a relue.
+
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Tout jouer sans publier (npm publish --dry-run)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Sans ça, `--provenance` échoue — ou pire, passe sans attester.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # `npm ci` et pas `npm install` : le lockfile fait foi. ⚠️ Il a déjà été
+      # réécrit par un npm de poste plus récent que celui de la CI — si cette
+      # étape casse sur le lock, c'est là qu'il faut regarder en premier.
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run build
+
+      # Le paquet ne doit embarquer AUCUNE dépendance à l'exécution : c'est un
+      # critère de vérification n8n, et il se casse par un seul `import`. On le
+      # vérifie ici plutôt que de le croire, parce que la panne serait un refus
+      # de vérification des semaines plus tard.
+      - name: Aucune dépendance à l'exécution
+        run: |
+          deps=$(node -p "JSON.stringify(require('./package.json').dependencies || {})")
+          if [ "$deps" != "{}" ]; then
+            echo "::error::Le paquet a des dépendances à l'exécution : $deps"
+            echo "Un nœud vérifié n'en porte aucune. Cf. CHANGELOG 1.0.0."
+            exit 1
+          fi
+
+      - name: Le tag correspond à la version du package
+        if: github.event_name == 'release'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME ≠ version package.json $pkg"
+            exit 1
+          fi
+
+      - name: npm publish --provenance
+        if: github.event_name == 'release'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: npm publish --dry-run
+        if: github.event_name == 'workflow_dispatch'
+        run: npm publish --provenance --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

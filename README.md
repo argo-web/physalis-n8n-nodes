@@ -1,245 +1,79 @@
 # n8n-nodes-physalis
 
-Nœud N8n communautaire pour [Physalis](https://physalis.cloud) — récupère
-secrets, services et comptes applicatifs depuis ton vault Physalis
-directement dans tes workflows N8n, sans dupliquer les credentials.
+Community n8n node for [Physalis](https://physalis.cloud) — read secrets,
+services and app accounts from your Physalis vault directly inside your
+workflows, **without copying them into n8n**.
 
-> **Pourquoi ?** Si tu changes un mot de passe dans Physalis, le workflow
-> N8n l'utilise automatiquement à la prochaine exécution. Aucun secret
-> stocké en clair dans N8n. Chaque accès est tracé dans l'audit log
-> Physalis.
+> **Why?** Change a password in Physalis and the workflow picks up the new
+> value on its next run. Nothing is stored in clear text inside n8n, and every
+> access is recorded in the Physalis audit log.
 
 ---
 
 ## Installation
 
-Dans ton instance N8n :
+In your n8n instance:
 
 1. **Settings → Community Nodes → Install**
-2. Coller le nom du package : `n8n-nodes-physalis`
-3. Cliquer sur « Install »
+2. Enter the package name: `n8n-nodes-physalis`
+3. Click **Install**
 
-Une fois installé, le nœud **Physalis** apparaît dans le node picker
-(catégorie « Development »).
-
----
-
-## Configuration des credentials
-
-1. Dans Physalis, génère un token Bearer :
-   - **Token utilisateur** (`sv_user_…`) : Settings → Sécurité → Tokens
-     d'intégration. Scopé à ton compte, accès aux projets dont tu es
-     membre. ⚠️ Révoqué si tu quittes ton organisation.
-   - **Token organisation** (`sv_org_…`) — *recommandé pour les
-     workflows pérennes* : Org → Tokens. Scopé à l'organisation, survit
-     au départ du créateur, scopes explicites + liste de projets
-     autorisés. Réservé OrgADMIN.
-   - **Token machine** (`sv_…`) : Project → Machine tokens. Scopé à un
-     projet + un environnement précis. Pour CI/CD principalement.
-
-2. Dans N8n : **Credentials → New → Physalis API** et remplir :
-   - **Vault URL** : URL de ton instance Physalis (ex:
-     `https://vault.physalis.cloud` — sans slash final)
-   - **Bearer Token** : le token brut (`sv_user_…`, `sv_org_…` ou `sv_…`)
-
-3. Cliquer sur « Test connection » — doit répondre OK même si la liste
-   de projets est vide.
+Once installed, the **Physalis** node appears in the node picker (category
+*Development*). It can also be attached to an AI agent as a tool.
 
 ---
 
-## Opérations supportées
+## Setting up credentials
 
-### Coffre d'équipe (V0.4.0+)
+1. In Physalis, create a Bearer token:
+   - **User token** (`sv_user_…`) — Settings → Security → Integration tokens.
+     Scoped to your account, grants access to the projects you are a member of.
+     ⚠️ Revoked if you leave your organization.
+   - **Organization token** (`sv_org_…`) — *recommended for long-lived
+     workflows*: Org → Tokens. Scoped to the organization, survives the
+     departure of whoever created it, with explicit scopes and an allowlist of
+     projects. Requires OrgADMIN.
+   - **Machine token** (`sv_…`) — Project → Machine tokens. Locked to a single
+     project and environment. Mostly for CI/CD.
 
-Le champ **Source** de *Get Credentials* choisit d'où viennent les secrets :
+2. In n8n: **Credentials → New → Physalis API**, then fill in:
+   - **Vault URL** — the URL of your Physalis instance (e.g.
+     `https://vault.physalis.cloud`, no trailing slash)
+   - **Bearer Token** — the raw token (`sv_user_…`, `sv_org_…` or `sv_…`)
 
-| Source | Pour quoi |
-|---|---|
-| **Project** | secrets, services et comptes scopés `projet × environnement` — ce qui sert à **déployer** une application |
-| **Team Vault** | secrets d'**équipe** qui n'appartiennent à aucun projet : URL de webhook, clé de veille, jeton partagé |
-
-En *Team Vault*, on renseigne le **slug de la collection**, plus éventuellement
-un **tag** et un **nom d'entrée**. La sortie a la même forme que pour un secret
-de projet — `key`, `value`, plus `url`, `username` et `tags` — donc
-`{{ $json.value }}` fonctionne à l'identique des deux côtés.
-
-> **Pourquoi cette distinction ?** Une URL de webhook Slack n'a ni projet ni
-> environnement. La ranger dans un projet oblige à en choisir un arbitrairement,
-> et cette dette se paie à chaque automatisation suivante.
-
-⚠️ **Un token machine ne peut pas lire le coffre d'équipe.** Il est verrouillé
-sur un projet ET un environnement ; une collection d'équipe n'a ni l'un ni
-l'autre. Utilisez un token **utilisateur** (`sv_user_…`) ou **organisation**
-(`sv_org_…`).
-
-⚠️ Les workflows créés avec une version ≤ 0.3.x continuent de fonctionner : sans
-le champ `Source`, le nœud retombe sur `project`.
+3. Click **Test connection** — it must succeed even if your project list is
+   empty.
 
 ---
 
-### Send Email (V0.3.0+)
-
-Envoie un email via **Mailgun** (US ou EU), avec credentials stockés
-dans Physalis ou remplis manuellement.
-
-> V1 : provider Mailgun seul. V2 prévu : SendGrid, SMTP, AWS SES.
-
-**Convention de stockage côté Physalis** :
-
-Secrets dans un environnement, taggés `mailgun` (ou un autre tag de ton
-choix — configurable dans le nœud). Le parser accepte plusieurs alias :
-
-| Champ requis | Noms acceptés |
-|---|---|
-| **API Key** | `MAILGUN_API_KEY`, `MAILGUN_KEY`, `MAILGUN_SECRET_KEY`, `API_KEY`, `EMAIL_API_KEY` |
-| **Domain** | `MAILGUN_DOMAIN`, `MAIL_DOMAIN`, `EMAIL_DOMAIN`, `DOMAIN`, `SENDING_DOMAIN` |
-
-| Champ optionnel | Noms acceptés | Défaut |
-|---|---|---|
-| **Region** | `MAILGUN_REGION`, `EMAIL_REGION`, `REGION` | `us` (sinon `eu`) |
-| **Default From** | `MAILGUN_FROM`, `EMAIL_FROM`, `FROM`, `FROM_EMAIL`, `SENDER`, `DEFAULT_FROM` | — (override par le champ From du nœud sinon obligatoire) |
-
-**Champs du nœud** :
-
-| Champ | Description |
-|---|---|
-| **From** | `Name <addr@domain>` ou `addr@domain`. Fallback sur le secret FROM si vide. |
-| **To** | Une ou plusieurs adresses séparées par virgules |
-| **Subject** | Sujet du mail |
-| **Text Body** | Plain text (au moins un body requis : text ou HTML) |
-| **HTML Body** | HTML (multipart alternative si combiné avec Text) |
-| **CC** / **BCC** | Destinataires copie / copie cachée (csv) |
-| **Reply To** | Header Reply-To |
-| **Tags** | Mailgun analytics tags (max 3) — csv |
-
-**Exemple** :
-
-```
-[Webhook]                    [Physalis: Send Email]
-  → email, name         →    Source: From Physalis
-                             Project: voyages
-                             Env: production
-                             Tag: mailgun
-                             From: Acme <noreply@mg.acme.fr>
-                             To: {{ $json.email }}
-                             Subject: Welcome {{ $json.name }}
-                             HTML Body: <h1>Hi {{ $json.name }}</h1>
-                             Tags: welcome, onboarding
-```
-
-**Sortie** : 1 item N8n avec `{ ok, provider, region, id, message, from, to, subject }`. Sur erreur Mailgun (4xx/5xx), throw `NodeOperationError` avec le détail du serveur.
-
----
-
-### Execute SQL (V0.2.0+)
-
-Connecte-toi à une base PostgreSQL / MySQL / MariaDB et exécute du SQL,
-avec credentials récupérés depuis Physalis ou remplis manuellement dans
-le nœud.
-
-**Source des credentials** :
-
-| Mode | Description |
-|---|---|
-| **From Physalis** (recommandé) | Récupère 5 Secrets dans Physalis taggés `postgres` / `mysql` / `mariadb` |
-| **Manual** | Remplit `host`, `port`, `user`, `password`, `database` directement dans le nœud |
-
-**Convention de stockage côté Physalis** (mode From Physalis) :
-
-Pour chaque base de données, crée des Secrets dans un environnement,
-tous taggés avec le type de DB (`postgres`, `mysql` ou `mariadb`). Le
-parser accepte **plusieurs conventions de naming** (case-insensitive,
-première clé trouvée prioritaire) :
-
-| Champ requis | Noms acceptés |
-|---|---|
-| **Host** | `HOST`, `POSTGRES_HOST`, `MYSQL_HOST`, `MARIADB_HOST`, `DB_HOST`, `HOST_NAME`, `HOSTNAME` |
-| **User** | `USER`, `POSTGRES_USER`, `MYSQL_USER`, `MARIADB_USER`, `DB_USER`, `USERNAME` |
-| **Password** | `PASSWORD`, `POSTGRES_PASSWORD`, `MYSQL_PASSWORD`, `MARIADB_PASSWORD`, `DB_PASSWORD`, `PWD` |
-| **Database** | `DATABASE`, `POSTGRES_DB`, `POSTGRES_DATABASE`, `MYSQL_DATABASE`, `MARIADB_DATABASE`, `DB_NAME`, `DB_DATABASE`, `DATABASE_NAME` |
-
-| Champ optionnel | Noms acceptés | Défaut |
-|---|---|---|
-| **Port** | `PORT`, `POSTGRES_PORT`, `MYSQL_PORT`, `MARIADB_PORT`, `DB_PORT` | 5432 (PG) / 3306 (MySQL/MariaDB) |
-
-**Fallback URL** : si un secret `DATABASE_URL`, `POSTGRES_URL`,
-`MYSQL_URL` ou `MARIADB_URL` est présent, son contenu est parsé et
-comble les champs manquants. Les clés discrètes ci-dessus prennent
-priorité sur les composants de l'URL (utile quand ton `DATABASE_URL`
-pointe sur `localhost` mais que tu veux utiliser le hostname Docker
-via `HOST_NAME`).
-
-**Exemple typique** (convention Docker / .env Postgres) :
-```
-POSTGRES_USER=voyages
-POSTGRES_PASSWORD=voyages
-POSTGRES_PORT=5432
-HOST_NAME=voyages-postgres
-DATABASE_URL=postgres://voyages:voyages@localhost:5432/voyages
-```
-→ le parser reconstruit `postgres://voyages:voyages@voyages-postgres:5432/voyages`
-(`HOST_NAME` wins sur l'host de l'URL, et le DB name est extrait de l'URL).
-
-> 💡 Le SSL est détecté automatiquement. Les hosts publics (cloud :
-> Supabase, Neon, RDS, Render…) activent SSL. Les hosts locaux
-> (localhost, IPs RFC1918, `.local`) le désactivent.
-
-**Opérations SQL** :
-
-| Opération | Description |
-|---|---|
-| **Execute Query** | SQL arbitraire avec param binds positionnels (`$1`/`$2` PG, `?` MySQL). Pour SELECT, retourne 1 item N8n par row. Pour INSERT/UPDATE/DELETE, retourne 1 item avec `rowCount`. |
-| **List Schemas** | Retourne tous les schemas accessibles (PG) ou databases (MySQL). 1 item par schema. |
-| **List Tables** | Retourne les tables d'un schema (défaut `public` pour PG, current database pour MySQL). 1 item par table avec `table_name` + `table_type`. |
-
-**Exemple : query paramétrée PostgreSQL**
-
-```
-[Webhook]                    [Physalis: Execute SQL]
-  → user_id: 42         →    Source: From Physalis
-                             Project: voyages
-                             Env: production
-                             Tag: postgres
-                             SQL Op: Execute Query
-                             Query: SELECT name, email FROM users WHERE id = $1
-                             Parameters: {{ $json.user_id }}
-```
-
-**Exemple : insertion MySQL avec dynamic data**
-
-```
-[Set]                        [Physalis: Execute SQL]
-  → email, plan         →    Source: From Physalis
-                             Project: app
-                             Env: production
-                             Tag: mariadb
-                             SQL Op: Execute Query
-                             Query: INSERT INTO subscriptions (email, plan, created_at)
-                                    VALUES (?, ?, NOW())
-                             Parameters: {{ $json.email }},{{ $json.plan }}
-```
-
-⚠️ **Sécurité SQL injection** : utilise TOUJOURS les param binds plutôt
-que l'interpolation directe `{{ $json.x }}` dans la query. Les binds
-sont passés séparément par le driver et échappés correctement. Mettre
-les valeurs dynamiques dans le champ **Parameters**, pas dans **Query**.
-
----
+## Operations
 
 ### Get Credentials
 
-Récupère secrets, services ou comptes applicatifs d'un projet, avec
-filtres optionnels.
+Reads from one of two sources.
 
-| Champ | Description |
+**Source: Project** — secrets, services and app accounts scoped to a project
+and an environment. This is what deploys an application.
+
+| Field | Description |
 |---|---|
-| **Project** | Slug du projet (chargé dynamiquement depuis l'API) |
-| **Type** | `secret` (clés/valeurs d'env) · `service` (Stripe, Firebase…) · `account` (compte applicatif) |
-| **Environment** | Requis pour `secret` uniquement (ex: `production`) |
-| **Tag** | Filtre par tag technique (ex: `postgres`, `stripe`). Liste chargée dynamiquement. |
-| **Key** | Filtre clé exacte pour les secrets (case-sensitive) |
+| **Project** | Project slug (loaded dynamically from the API) |
+| **Type** | `secret` (env keys/values) · `service` (Stripe, Firebase…) · `account` (app-level account) |
+| **Environment** | Required for `secret` only (e.g. `production`) |
+| **Tag** | Filter by technical tag (e.g. `postgres`, `stripe`). Loaded dynamically. |
+| **Key** | Exact secret key, case-sensitive |
 
-**Exemples de réponse :**
+**Source: Team Vault** — shared secrets that belong to no project: incoming
+webhook URLs, watch keys, shared tokens. Forcing those into an arbitrary
+project is a debt you pay on every automation that follows.
+
+| Field | Description |
+|---|---|
+| **Collection** | Slug of the team vault collection to read |
+| **Tag** | Filter entries by tag. Empty returns the whole collection. |
+| **Entry Name** | Exact entry name. Empty returns every matching entry. |
+
+Sample responses:
 
 ```json
 // type=secret
@@ -258,28 +92,17 @@ filtres optionnels.
     "id": "ck...",
     "name": "Stripe Production",
     "url": "https://stripe.com",
-    "username": "admin@argoweb.fr",
+    "username": "admin@example.com",
     "password": "sk_live_...",
     "tags": ["stripe"]
-  }
-]
-
-// type=account
-[
-  {
-    "id": "ck...",
-    "name": "Compte test client",
-    "username": "test@example.com",
-    "password": "...",
-    "tags": ["staging"]
   }
 ]
 ```
 
 ### List Projects
 
-Liste les projets accessibles au token Bearer, avec leurs environnements.
-Utile pour des workflows dynamiques qui itèrent sur plusieurs projets.
+Lists the projects reachable by the Bearer token, with their environments.
+Useful for workflows that iterate over several projects.
 
 ```json
 [
@@ -297,67 +120,76 @@ Utile pour des workflows dynamiques qui itèrent sur plusieurs projets.
 
 ---
 
-## Permissions par type de token
+## Permissions per token type
 
-| | UserToken | OrgToken | MachineToken |
+| | User token | Org token | Machine token |
 |---|---|---|---|
-| `getCredentials` (secret) | ✅ projets membres | ✅ scopes explicites + liste projets | ✅ projet+env unique |
-| `getCredentials` (service / account) | ✅ projets membres | ✅ idem | ❌ (pas de scope service côté machine) |
-| `listProjects` | ✅ tous les projets membres | ✅ projets autorisés (`PROJECTS_LIST` requis) | ✅ un seul projet |
-| `executeSql` (Physalis source) | ✅ projets membres | ✅ scope `SECRETS_READ` requis | ✅ projet+env unique |
-| `executeSql` (manual) | ✅ N/A — auth Bearer ignorée pour le mode manual | ✅ idem | ✅ idem |
-| `sendEmail` (Physalis source) | ✅ projets membres | ✅ scope `SECRETS_READ` requis | ✅ projet+env unique |
-| `sendEmail` (manual) | ✅ N/A — auth Bearer ignorée pour le mode manual | ✅ idem | ✅ idem |
+| `getCredentials` — project, secret | ✅ member projects | ✅ explicit scopes + project allowlist | ✅ single project + env |
+| `getCredentials` — project, service / account | ✅ member projects | ✅ same | ❌ no service scope for machine tokens |
+| `getCredentials` — team vault | ✅ accessible collections | ✅ collection of its organization | ❌ locked to project × env, which a team collection has neither of |
+| `listProjects` | ✅ all member projects | ✅ allowed projects (`PROJECTS_LIST` required) | ✅ a single project |
 
-> Les **OrgSecrets** (clés globales de l'org type `GITHUB_DISPATCH_TOKEN`,
-> `REGISTRY_PAT`…) ne sont **jamais** accessibles via ce nœud, par design.
+> **OrgSecrets** (organization-wide keys such as `GITHUB_DISPATCH_TOKEN` or
+> `REGISTRY_PAT`) are **never** reachable through this node, by design.
 
 ---
 
-## Exemples de workflows
+## Example: using a secret in a native node
 
-### Connexion PostgreSQL automatique
-
-```
-[Physalis: getCredentials]            [PostgreSQL]
-  type: secret                   →    host: {{ $json.DATABASE_HOST }}
-  tag: postgres                       user: {{ $json.DATABASE_USER }}
-  project: voyages                    password: {{ $json.DATABASE_PASSWORD }}
-  env: production
-```
-
-### Envoi d'email via Mailgun
+The node returns the secret **as data**, so any downstream node can reference
+it by expression:
 
 ```
-[Physalis: getCredentials]            [HTTP Request]
-  type: service                  →    url: https://api.mailgun.net/...
-  tag: mailgun                        auth: {{ $json.username }}:{{ $json.password }}
-  project: newsletter
+[Physalis: Get Credentials]          [HTTP Request]
+  source: team_vault            →      url:    {{ $json.value }}
+  collection: automation               method: POST
+  tag: slack
 ```
+
+For database or email nodes, see **Migrating from 0.4.x** below.
 
 ---
 
-## Sécurité
+## Security
 
-- Le token Bearer transite chiffré en TLS — utilise toujours `https://`
-- Les tokens ont un préfixe identifiable (`sv_user_…`, `sv_org_…`, `sv_…`)
-  pour les scans GitHub (trufflehog, gitleaks)
-- Révocation instantanée depuis Physalis (le nœud cesse de fonctionner
-  immédiatement)
-- Chaque appel logge `INTEGRATION_CREDENTIALS_FETCH` dans l'audit Physalis
+- The Bearer token travels over TLS — always use `https://`.
+- Tokens carry an identifiable prefix (`sv_user_…`, `sv_org_…`, `sv_…`) so
+  secret scanners (trufflehog, gitleaks) can catch a leak.
+- Revocation is instant from Physalis — the node stops working immediately.
+- Every call records `INTEGRATION_CREDENTIALS_FETCH` in the Physalis audit log.
 
 ---
 
-## Build local
+## Migrating from 0.4.x
+
+**1.0.0 removes the `Execute SQL` and `Send Email` operations.** A verified n8n
+community node must talk to exactly one third-party service and must ship no
+runtime dependencies; those two operations broke both rules and kept the whole
+package off n8n Cloud. See the [CHANGELOG](CHANGELOG.md) for the full
+reasoning, including what is genuinely lost.
+
+| You were using | Use instead |
+|---|---|
+| `Execute SQL` | The native **Postgres** / **MySQL** node, with its credential written and kept up to date from your Physalis vault |
+| `Send Email` | The native **Send Email** node, same mechanism |
+
+Physalis can write a native n8n credential from a vault entry and keep it in
+sync in place — the credential ID stays stable, so workflows referencing it
+survive a rotation. That path works on n8n Cloud today, which the removed
+operations never did.
+
+---
+
+## Local build
 
 ```bash
 npm install
 npm run build       # tsc + gulp icons → dist/
-npm run typecheck   # validation TS sans build
-npm run lint        # eslint avec règles n8n-nodes-base
+npm run typecheck   # TS validation, no build
+npm run lint        # eslint with the n8n-nodes-base rules
 ```
 
-Pour tester dans N8n localement :
+To test inside a local n8n:
 
 ```bash
 npm link
@@ -374,11 +206,10 @@ MIT © [Argoweb](https://argoweb.fr)
 
 ---
 
-## Liens
+## Links
 
 - [Physalis](https://physalis.cloud)
-- [Documentation Physalis](https://physalis.cloud/docs)
-- [Documentation Physalis — intégration n8n](https://physalis.cloud/en/docs/n8n-integration)
-- [Toute la documentation](https://physalis.cloud/en/docs)
+- [Physalis documentation](https://physalis.cloud/en/docs)
+- [Physalis — n8n integration](https://physalis.cloud/en/docs/n8n-integration)
 - [Issues](https://github.com/physalis-cloud/physalis-n8n-nodes/issues)
-- [N8n Community Nodes](https://docs.n8n.io/integrations/community-nodes/)
+- [n8n community nodes](https://docs.n8n.io/integrations/community-nodes/)

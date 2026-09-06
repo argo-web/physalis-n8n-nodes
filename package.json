@@ -1,19 +1,14 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "0.4.0",
-  "description": "n8n community node for Physalis — fetch secrets/services/accounts, run SQL queries on PostgreSQL/MySQL/MariaDB, and send emails via Mailgun, all using credentials stored securely in your Physalis vault.",
+  "version": "1.0.0",
+  "description": "n8n community node for Physalis — fetch secrets, services and app accounts from your Physalis vault, without copying them into n8n.",
   "keywords": [
     "n8n-community-node-package",
     "physalis",
     "secrets",
     "vault",
     "credentials",
-    "sql",
-    "postgresql",
-    "mysql",
-    "mariadb",
-    "mailgun",
-    "email"
+    "secrets-management"
   ],
   "license": "MIT",
   "homepage": "https://physalis.cloud/en/docs",
@@ -52,7 +47,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/pg": "^8.11.0",
     "@typescript-eslint/parser": "^7.15.0",
     "eslint": "^8.57.0",
     "eslint-plugin-n8n-nodes-base": "^1.16.0",
@@ -60,10 +54,6 @@
     "n8n-workflow": "^1.65.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
-  },
-  "dependencies": {
-    "mysql2": "^3.11.0",
-    "pg": "^8.13.0"
   },
   "peerDependencies": {
     "n8n-workflow": "*"
