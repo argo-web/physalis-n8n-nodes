@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.0.2
+
+### Fixed — the verification scanner's findings
+
+1.0.1 was submitted to n8n verification and refused. `npx
+@n8n/scan-community-package` reported three defects; provenance and the source
+fetch had both passed, so this is the whole of what stood between the package
+and a verified badge.
+
+- **The credential class declared no icon.** A credential without one shows as a
+  blank tile in the picker.
+- **`inputs`/`outputs` used the string literal `'main'`.** The scanner requires
+  `NodeConnectionTypes.Main`. The literal works today, but it would not survive
+  a rename on n8n's side, and nothing would report it before runtime.
+- **Returned items carried no `pairedItem`.** ⚠️ This one was never cosmetic.
+  Without it n8n cannot link an output item back to the input that produced it,
+  so `$('Physalis').item` does not resolve downstream and expressions must fall
+  back to `.first()` — which silently reads the *first* item for *every* one of
+  them. A workflow fanning three records out of this node produced three
+  messages all describing the first. The node returned correct data and the
+  workflow downstream was wrong.
+
+⚠️ **Two lint rules contradict each other on the connection types**, and the
+conflict is now pinned in place with two inline `eslint-disable` comments rather
+than resolved in configuration — `n8n-nodes-base` demands the literal, and
+`@n8n/community-nodes` demands the constant. The disable sits at the code so the
+next upgrade of either plugin surfaces it. See the comment in `Physalis.node.ts`.
+
+One scanner **warning** is left unaddressed on purpose: the node icon is a
+single file rather than a `{ light, dark }` pair. It does not gate verification.
+
 ## 1.0.1
 
 ### Fixed — package authorship

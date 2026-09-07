@@ -6,6 +6,7 @@ import {
   INodePropertyOptions,
   INodeType,
   INodeTypeDescription,
+  NodeConnectionTypes,
 } from "n8n-workflow";
 
 /**
@@ -55,8 +56,23 @@ export class Physalis implements INodeType {
     // tierces sans qu'aucune clé ne soit écrite dans le workflow est
     // exactement ce que le coffre apporte, et rien d'autre ne le fait.
     usableAsTool: true,
-    inputs: ["main"],
-    outputs: ["main"],
+    // ⚠️ **Deux règles de lint se contredisent ici, et il faut choisir.**
+    //
+    //   · `@n8n/community-nodes/node-connection-type-literal` — celui du
+    //     SCANNER DE VÉRIFICATION — exige `NodeConnectionTypes.Main` ;
+    //   · `n8n-nodes-base/node-class-description-inputs-wrong-regular-node` —
+    //     celui, plus ancien, du plugin du projet — exige la chaîne `['main']`.
+    //
+    // Le premier gouverne la publication : un paquet qui ne le satisfait pas
+    // est refusé à la vérification, donc invisible sur n8n Cloud. Le second
+    // n'est qu'une convention interne. On satisfait celui qui décide, et on
+    // fait taire l'autre ICI plutôt qu'en le retirant de la configuration —
+    // pour que le conflit reste visible à la prochaine montée de version des
+    // deux plugins.
+    // eslint-disable-next-line n8n-nodes-base/node-class-description-inputs-wrong-regular-node
+    inputs: [NodeConnectionTypes.Main],
+    // eslint-disable-next-line n8n-nodes-base/node-class-description-outputs-wrong
+    outputs: [NodeConnectionTypes.Main],
     credentials: [
       {
         name: "physalisApi",
@@ -372,7 +388,13 @@ export class Physalis implements INodeType {
         const projects =
           (response as { projects?: IDataObject[] }).projects ?? [];
         for (const p of projects) {
-          returnData.push({ json: p });
+          // ⚠️ `pairedItem` rattache chaque sortie à l'entrée qui l'a produite.
+          // Sans lui, `$('Physalis').item` ne résout RIEN en aval — n8n ne sait
+          // pas quel item d'entrée correspond, et l'utilisateur doit se rabattre
+          // sur `.first()`, qui rend toujours l'item 0. Ça a coûté un vrai
+          // défaut côté Physalis le 2026-09-06 : trois mails relevés, trois
+          // alertes décrivant le premier.
+          returnData.push({ json: p, pairedItem: { item: i } });
         }
         continue;
       }
@@ -411,7 +433,7 @@ export class Physalis implements INodeType {
             );
           const fetched = (response as { items?: IDataObject[] }).items ?? [];
           for (const it of fetched) {
-            returnData.push({ json: it });
+            returnData.push({ json: it, pairedItem: { item: i } });
           }
           continue;
         }
@@ -448,7 +470,7 @@ export class Physalis implements INodeType {
         const fetchedItems =
           (response as { items?: IDataObject[] }).items ?? [];
         for (const it of fetchedItems) {
-          returnData.push({ json: it });
+          returnData.push({ json: it, pairedItem: { item: i } });
         }
         continue;
       }

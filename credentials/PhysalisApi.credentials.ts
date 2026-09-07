@@ -2,6 +2,7 @@ import {
   IAuthenticateGeneric,
   ICredentialTestRequest,
   ICredentialType,
+  Icon,
   INodeProperties,
 } from "n8n-workflow";
 
@@ -23,6 +24,16 @@ export class PhysalisApi implements ICredentialType {
   name = "physalisApi";
 
   displayName = "Physalis API";
+
+  /**
+   * ⚠️ Exigée par la vérification n8n (`cred-class-field-icon-missing`), et
+   * pas seulement pour la forme : sans elle, l'écran de credentials affiche un
+   * carré vide là où l'utilisateur cherche « Physalis ».
+   *
+   * Le chemin est relatif au fichier compilé, donc au dossier du nœud — c'est
+   * la même image que celle du nœud, et non une copie qui divergerait.
+   */
+  icon: Icon = "file:../nodes/Physalis/physalis.svg";
 
   // eslint-disable-next-line n8n-nodes-base/cred-class-field-documentation-url-miscased
   documentationUrl =
