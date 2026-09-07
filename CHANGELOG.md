@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.1
+
+### Fixed — package authorship
+
+`author` pointed at an email belonging to a **different company**, carried over
+from the project's earliest scaffolding. Every published version up to 1.0.0
+attributed the package to the wrong organisation, and the owner could not
+receive mail sent to it.
+
+⚠️ npm metadata is immutable per version: a published `author` cannot be
+corrected in place, only superseded by a new release. Hence 1.0.1 with no code
+change — `npm owner` manages maintainers, not this field.
+
+No functional change. If you are on 1.0.0, there is nothing to gain from
+upgrading beyond correct attribution.
+
 ## 1.0.0
 
 ### Breaking — `Execute SQL` and `Send Email` are removed

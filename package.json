@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-physalis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "n8n community node for Physalis — fetch secrets, services and app accounts from your Physalis vault, without copying them into n8n.",
   "keywords": [
     "n8n-community-node-package",
@@ -21,7 +21,7 @@
   },
   "author": {
     "name": "Argoweb",
-    "email": "contact@agence-scroll.com"
+    "email": "contact@argoweb.fr"
   },
   "main": "dist/index.js",
   "scripts": {
