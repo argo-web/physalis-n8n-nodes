@@ -31,6 +31,15 @@ next upgrade of either plugin surfaces it. See the comment in `Physalis.node.ts`
 One scanner **warning** is left unaddressed on purpose: the node icon is a
 single file rather than a `{ light, dark }` pair. It does not gate verification.
 
+### Added — `scripts/scan-local.sh`
+
+The scanner only accepts an **already published** package name, so until now the
+only way to learn whether a release would pass was to publish it and read the
+refusal — at the cost of a version number each time, npm metadata being
+immutable. Three versions went that way. The script replays the scanner's two
+lint legs against local sources, so the next submission is checked before it is
+published. It does not replay provenance, which only a CI run can produce.
+
 ## 1.0.1
 
 ### Fixed — package authorship
